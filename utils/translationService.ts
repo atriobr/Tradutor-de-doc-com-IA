@@ -70,21 +70,26 @@ async function translateWithOpenAI(text: string, apiKey: string): Promise<string
 }
 
 async function translateWithDeepSeek(text: string, apiKey: string): Promise<string> {
-    const openai = new OpenAI({
-        baseURL: 'https://api.deepseek.com' + '/proxy/deepseek', // Use proxy
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true
+    // Use Vercel API route to avoid CORS
+    const response = await fetch('/api/deepseek', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+            messages: [
+                { role: "system", content: SYSTEM_PROMPT },
+                { role: "user", content: text }
+            ],
+            model: "deepseek-chat",
+        }),
     });
 
-    const completion = await openai.chat.completions.create({
-        messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: text }
-        ],
-        model: "deepseek-chat",
-    });
+    if (!response.ok) {
+        throw new Error(`DeepSeek API error: ${response.statusText}`);
+    }
 
-    return completion.choices[0].message.content || "";
+    const data = await response.json();
+    return data.choices[0].message.content || "";
 }
-
-
