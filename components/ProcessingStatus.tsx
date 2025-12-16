@@ -3,6 +3,7 @@ import { Loader2, CheckCircle2, FileText, Languages, FileOutput, AlertTriangle }
 import jsPDF from 'jspdf';
 import { extractTextFromPDF } from '../utils/pdfWorker';
 import { translateText, TranslationProvider } from '../utils/translationService';
+import { saveTranslationProgress, loadTranslationProgress, clearTranslationCache, getCacheInfo } from '../utils/translationCache';
 
 interface ProcessingStatusProps {
   file: File;
@@ -41,30 +42,53 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete 
           setProgress(10 + (current / total) * 20); // 10% to 30%
         });
 
-        // Step 2: Translation (PARALLEL for speed)
+
+        // Step 2: Translation (PARALLEL for speed + CACHE for resume)
         setCurrentStep(1);
 
-        // Process in batches of 5 pages at a time for maximum speed
-        const BATCH_SIZE = 5;
-        const translatedPages = [];
+        // Try to load cached progress
+        const cachedPages = loadTranslationProgress(fileName, provider);
+        let translatedPages = cachedPages || [];
 
-        for (let i = 0; i < pages.length; i += BATCH_SIZE) {
+        if (cachedPages) {
+          console.log(`📦 Resuming from cache: ${cachedPages.length} pages already translated`);
+          setProgress(30 + (cachedPages.length / pages.length) * 50);
+        }
+
+        // Only translate pages that haven't been cached
+        const startIndex = translatedPages.length;
+        const BATCH_SIZE = 5;
+
+        for (let i = startIndex; i < pages.length; i += BATCH_SIZE) {
           const batch = pages.slice(i, i + BATCH_SIZE);
 
-          // Translate multiple pages simultaneously
-          const batchPromises = batch.map(page =>
-            translateText({
-              text: page.text,
-              provider,
-              apiKey: undefined
-            }).then(translatedText => ({ ...page, text: translatedText }))
-          );
+          try {
+            // Translate multiple pages simultaneously
+            const batchPromises = batch.map(page =>
+              translateText({
+                text: page.text,
+                provider,
+                apiKey: undefined
+              }).then(translatedText => ({ ...page, text: translatedText }))
+            );
 
-          const batchResults = await Promise.all(batchPromises);
-          translatedPages.push(...batchResults);
+            const batchResults = await Promise.all(batchPromises);
+            translatedPages.push(...batchResults);
 
-          setProgress(30 + (translatedPages.length / pages.length) * 50); // 30% to 80%
+            // Save progress after each batch (checkpoint)
+            saveTranslationProgress(fileName, provider, translatedPages, pages);
+
+            setProgress(30 + (translatedPages.length / pages.length) * 50); // 30% to 80%
+          } catch (batchError: any) {
+            // Save progress before throwing error
+            saveTranslationProgress(fileName, provider, translatedPages, pages);
+            throw new Error(`Erro no lote ${Math.floor(i / BATCH_SIZE) + 1}: ${batchError.message}. Progresso salvo: ${translatedPages.length}/${pages.length} páginas.`);
+          }
         }
+
+        // Clear cache on successful completion
+        clearTranslationCache();
+
 
         // Step 3: Reconstruction
         setCurrentStep(2);
