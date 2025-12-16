@@ -44,8 +44,8 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete 
         // Step 2: Translation (PARALLEL for speed)
         setCurrentStep(1);
 
-        // Process in batches of 3 pages at a time for optimal speed
-        const BATCH_SIZE = 3;
+        // Process in batches of 5 pages at a time for maximum speed
+        const BATCH_SIZE = 5;
         const translatedPages = [];
 
         for (let i = 0; i < pages.length; i += BATCH_SIZE) {
