@@ -71,7 +71,7 @@ async function translateWithOpenAI(text: string, apiKey: string): Promise<string
 
 async function translateWithDeepSeek(text: string, apiKey: string): Promise<string> {
     const openai = new OpenAI({
-        baseURL: https://api.deepseek.com + '/proxy/deepseek', // Use proxy
+        baseURL: 'https://api.deepseek.com' + '/proxy/deepseek', // Use proxy
         apiKey: apiKey,
         dangerouslyAllowBrowser: true
     });
@@ -86,4 +86,5 @@ async function translateWithDeepSeek(text: string, apiKey: string): Promise<stri
 
     return completion.choices[0].message.content || "";
 }
+
 
