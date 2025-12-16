@@ -41,18 +41,29 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete 
           setProgress(10 + (current / total) * 20); // 10% to 30%
         });
 
-        // Step 2: Translation
+        // Step 2: Translation (PARALLEL for speed)
         setCurrentStep(1);
+
+        // Process in batches of 3 pages at a time for optimal speed
+        const BATCH_SIZE = 3;
         const translatedPages = [];
-        for (let i = 0; i < pages.length; i++) {
-          const page = pages[i];
-          const translatedText = await translateText({
-            text: page.text,
-            provider,
-            apiKey: undefined // Uses env var
-          });
-          translatedPages.push({ ...page, text: translatedText });
-          setProgress(30 + ((i + 1) / pages.length) * 50); // 30% to 80%
+
+        for (let i = 0; i < pages.length; i += BATCH_SIZE) {
+          const batch = pages.slice(i, i + BATCH_SIZE);
+
+          // Translate multiple pages simultaneously
+          const batchPromises = batch.map(page =>
+            translateText({
+              text: page.text,
+              provider,
+              apiKey: undefined
+            }).then(translatedText => ({ ...page, text: translatedText }))
+          );
+
+          const batchResults = await Promise.all(batchPromises);
+          translatedPages.push(...batchResults);
+
+          setProgress(30 + (translatedPages.length / pages.length) * 50); // 30% to 80%
         }
 
         // Step 3: Reconstruction

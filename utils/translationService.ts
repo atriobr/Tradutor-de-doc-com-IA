@@ -86,10 +86,16 @@ async function translateWithDeepSeek(text: string, apiKey: string): Promise<stri
         }),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-        throw new Error(`DeepSeek API error: ${response.statusText}`);
+        const errorMsg = data.error || data.message || response.statusText || 'Unknown error';
+        throw new Error(`DeepSeek API error (${response.status}): ${errorMsg}`);
     }
 
-    const data = await response.json();
+    if (data.error) {
+        throw new Error(`DeepSeek API error: ${data.error.message || data.error}`);
+    }
+
     return data.choices[0].message.content || "";
 }
