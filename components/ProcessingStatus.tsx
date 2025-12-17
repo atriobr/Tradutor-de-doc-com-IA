@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, CheckCircle2, FileText, Languages, FileOutput, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle2, FileText, Languages, FileOutput, AlertTriangle, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { extractTextFromPDF } from '../utils/pdfWorker';
 import { translateText, TranslationProvider } from '../utils/translationService';
@@ -89,7 +89,7 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
           return; // Stop here
         }
 
-        const BATCH_SIZE = 5;
+        const BATCH_SIZE = 2; // Reduced from 5 to avoid Vercel 504 timeouts
 
         for (let i = startIndex; i < pages.length; i += BATCH_SIZE) {
           const batch = pages.slice(i, i + BATCH_SIZE);
@@ -164,7 +164,37 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
     processFile();
   }, [file, provider, onComplete]);
 
+  const handlePartialDownload = () => {
+    const cachedPages = loadTranslationProgress(fileName, provider);
+    if (!cachedPages || cachedPages.length === 0) return;
+
+    try {
+      const doc = new jsPDF();
+      cachedPages.forEach((page, index) => {
+        if (index > 0) doc.addPage();
+        doc.setFontSize(12);
+        const splitText = doc.splitTextToSize(page.text, 180);
+
+        let cursorY = 20;
+        for (let i = 0; i < splitText.length; i++) {
+          if (cursorY > 280) {
+            doc.addPage();
+            cursorY = 20;
+          }
+          doc.text(splitText[i], 15, cursorY);
+          cursorY += 7;
+        }
+      });
+      doc.save(`${fileName.replace('.pdf', '')}_PARCIAL_${cachedPages.length}_PAGINAS.pdf`);
+    } catch (err) {
+      console.error("Erro ao gerar PDF parcial:", err);
+    }
+  };
+
   if (error) {
+    const cachedPages = loadTranslationProgress(fileName, provider);
+    const hasPartialContent = cachedPages && cachedPages.length > 0;
+
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 w-full">
         <div className="bg-red-50 p-6 rounded-xl border border-red-200 text-center max-w-lg">
@@ -172,13 +202,26 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
             <AlertTriangle className="w-6 h-6" />
           </div>
           <h3 className="text-lg font-bold text-red-800 mb-2">Erro no Processamento</h3>
-          <p className="text-red-700">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-white border border-red-300 rounded-lg text-red-700 hover:bg-red-50"
-          >
-            Tentar Novamente
-          </button>
+          <p className="text-red-700 mb-4">{error}</p>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-white border border-red-300 rounded-lg text-red-700 hover:bg-red-50 font-medium"
+            >
+              Tentar Novamente
+            </button>
+
+            {hasPartialContent && (
+              <button
+                onClick={handlePartialDownload}
+                className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Baixar {cachedPages.length} Páginas Traduzidas
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -233,6 +276,36 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
           />
         </div>
         <p className="text-center text-xs text-slate-400 font-medium">{Math.round(progress)}% Concluído</p>
+
+        {/* Partial Download Button during processing */}
+        {progress > 15 && !previewOnly && (
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => {
+                const cached = loadTranslationProgress(fileName, provider);
+                if (cached && cached.length > 0) {
+                  const doc = new jsPDF();
+                  cached.forEach((page, index) => {
+                    if (index > 0) doc.addPage();
+                    doc.setFontSize(12);
+                    const splitText = doc.splitTextToSize(page.text, 180);
+                    let cursorY = 20;
+                    for (let i = 0; i < splitText.length; i++) {
+                      if (cursorY > 280) { doc.addPage(); cursorY = 20; }
+                      doc.text(splitText[i], 15, cursorY);
+                      cursorY += 7;
+                    }
+                  });
+                  doc.save(`${fileName.replace('.pdf', '')}_PARCIAL.pdf`);
+                }
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-800 underline cursor-pointer flex items-center"
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Baixar páginas já traduzidas
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

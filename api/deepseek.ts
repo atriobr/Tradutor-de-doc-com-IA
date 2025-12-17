@@ -1,5 +1,6 @@
 export const config = {
     runtime: 'edge',
+    maxDuration: 60, // Allow longer execution time if plan permits
 };
 
 export default async function handler(request: Request) {
