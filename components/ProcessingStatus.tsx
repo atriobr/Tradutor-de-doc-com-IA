@@ -89,13 +89,13 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
           return; // Stop here
         }
 
-        const BATCH_SIZE = 2; // Reduced from 5 to avoid Vercel 504 timeouts
+        const BATCH_SIZE = 1; // Reduced to 1 to prevent Vercel 504 timeouts on dense pages
 
         for (let i = startIndex; i < pages.length; i += BATCH_SIZE) {
           const batch = pages.slice(i, i + BATCH_SIZE);
 
           try {
-            // Translate multiple pages simultaneously
+            // Translate page by page (or small batch)
             const batchPromises = batch.map(page =>
               translateText({
                 text: page.text,
@@ -114,36 +114,25 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
           } catch (batchError: any) {
             // Save progress before throwing error
             saveTranslationProgress(fileName, provider, translatedPages, pages);
-            throw new Error(`Erro no lote ${Math.floor(i / BATCH_SIZE) + 1}: ${batchError.message}. Progresso salvo: ${translatedPages.length}/${pages.length} páginas.`);
+            throw new Error(`Erro na página ${i + 1}: ${batchError.message}. Progresso salvo: ${translatedPages.length}/${pages.length} páginas.`);
           }
         }
 
         // Clear cache on successful completion
         clearTranslationCache();
 
-        // Step 3: Reconstruction
+        // Step 3: Reconstruction (Visual)
         setCurrentStep(2);
         setProgress(90);
-        const doc = new jsPDF();
 
-        translatedPages.forEach((page, index) => {
-          if (index > 0) doc.addPage();
+        // Use new Visual Generator
+        const { generateVisualPDF } = await import('../utils/pdfGenerator');
 
-          doc.setFontSize(12);
-          const splitText = doc.splitTextToSize(page.text, 180); // Margin
-
-          let cursorY = 20;
-          for (let i = 0; i < splitText.length; i++) {
-            if (cursorY > 280) {
-              doc.addPage();
-              cursorY = 20;
-            }
-            doc.text(splitText[i], 15, cursorY);
-            cursorY += 7;
-          }
+        const pdfBlob = await generateVisualPDF(file, translatedPages, (current, total) => {
+          // Update progress during PDF generation if it takes time
+          setProgress(90 + (current / total) * 10);
         });
 
-        const pdfBlob = doc.output('blob');
         setProgress(100);
 
         // Collect full text for preview
@@ -164,28 +153,25 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
     processFile();
   }, [file, provider, onComplete]);
 
-  const handlePartialDownload = () => {
+  const handlePartialDownload = async () => {
     const cachedPages = loadTranslationProgress(fileName, provider);
     if (!cachedPages || cachedPages.length === 0) return;
 
     try {
-      const doc = new jsPDF();
-      cachedPages.forEach((page, index) => {
-        if (index > 0) doc.addPage();
-        doc.setFontSize(12);
-        const splitText = doc.splitTextToSize(page.text, 180);
+      const { generateVisualPDF } = await import('../utils/pdfGenerator');
+      // Note: Partial download needs 'file' access. 'file' is available in scope.
+      const pdfBlob = await generateVisualPDF(file, cachedPages);
 
-        let cursorY = 20;
-        for (let i = 0; i < splitText.length; i++) {
-          if (cursorY > 280) {
-            doc.addPage();
-            cursorY = 20;
-          }
-          doc.text(splitText[i], 15, cursorY);
-          cursorY += 7;
-        }
-      });
-      doc.save(`${fileName.replace('.pdf', '')}_PARCIAL_${cachedPages.length}_PAGINAS.pdf`);
+      // Manually trigger download
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${fileName.replace('.pdf', '')}_PARCIAL_${cachedPages.length}_PAGINAS.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
     } catch (err) {
       console.error("Erro ao gerar PDF parcial:", err);
     }
@@ -281,24 +267,7 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete,
         {progress > 15 && !previewOnly && (
           <div className="flex justify-center mt-4">
             <button
-              onClick={() => {
-                const cached = loadTranslationProgress(fileName, provider);
-                if (cached && cached.length > 0) {
-                  const doc = new jsPDF();
-                  cached.forEach((page, index) => {
-                    if (index > 0) doc.addPage();
-                    doc.setFontSize(12);
-                    const splitText = doc.splitTextToSize(page.text, 180);
-                    let cursorY = 20;
-                    for (let i = 0; i < splitText.length; i++) {
-                      if (cursorY > 280) { doc.addPage(); cursorY = 20; }
-                      doc.text(splitText[i], 15, cursorY);
-                      cursorY += 7;
-                    }
-                  });
-                  doc.save(`${fileName.replace('.pdf', '')}_PARCIAL.pdf`);
-                }
-              }}
+              onClick={() => handlePartialDownload()}
               className="text-xs text-indigo-600 hover:text-indigo-800 underline cursor-pointer flex items-center"
             >
               <Download className="w-3 h-3 mr-1" />
