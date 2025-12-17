@@ -90,6 +90,24 @@ async function translateWithOpenAI(text: string, apiKey: string): Promise<string
 }
 
 async function translateWithDeepSeek(text: string, apiKey: string): Promise<string> {
+    // IMPLEMENTATION: Chunking to avoid Vercel Timeouts
+    // If text is too long (> 1500 chars), split it into smaller chunks
+    const MAX_CHUNK_SIZE = 1500;
+
+    if (text.length > MAX_CHUNK_SIZE) {
+        console.log(`Text too long (${text.length} chars), splitting into chunks...`);
+        const chunks = splitTextCheck(text, MAX_CHUNK_SIZE);
+        let translatedChunks = [];
+
+        for (const chunk of chunks) {
+            // Translate each chunk sequentially
+            const translatedChunk = await translateWithDeepSeek(chunk, apiKey);
+            translatedChunks.push(translatedChunk);
+        }
+
+        return translatedChunks.join(' ');
+    }
+
     // Use Vercel API route to avoid CORS
     const response = await fetch('/api/deepseek', {
         method: 'POST',
@@ -128,4 +146,48 @@ async function translateWithDeepSeek(text: string, apiKey: string): Promise<stri
     }
 
     return data.choices[0].message.content || "";
+}
+
+function splitTextCheck(text: string, maxLength: number): string[] {
+    if (text.length <= maxLength) return [text];
+
+    const chunks: string[] = [];
+    let currentChunk = '';
+
+    // Split by paragraphs first using our normalized newline
+    const paragraphs = text.split('\n');
+
+    for (const paragraph of paragraphs) {
+        // If adding this paragraph exceeds limit
+        if ((currentChunk.length + paragraph.length + 1) > maxLength) {
+            if (currentChunk.length > 0) {
+                chunks.push(currentChunk);
+                currentChunk = '';
+            }
+
+            // If paragraph ITSELF is huge, hard split it
+            if (paragraph.length > maxLength) {
+                let remaining = paragraph;
+                while (remaining.length > maxLength) {
+                    // Try to split at a sentence boundary near limit
+                    let splitIndex = remaining.lastIndexOf('.', maxLength);
+                    if (splitIndex === -1) splitIndex = remaining.lastIndexOf(' ', maxLength);
+                    if (splitIndex === -1) splitIndex = maxLength; // Hard cut
+
+                    chunks.push(remaining.substring(0, splitIndex));
+                    remaining = remaining.substring(splitIndex).trim();
+                }
+                currentChunk = remaining;
+            } else {
+                currentChunk = paragraph;
+            }
+        } else {
+            if (currentChunk.length > 0) currentChunk += '\n';
+            currentChunk += paragraph;
+        }
+    }
+
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+
+    return chunks;
 }
