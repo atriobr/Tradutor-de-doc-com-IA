@@ -11,6 +11,22 @@ interface TranslationOptions {
 
 const SYSTEM_PROMPT = "You are a professional translator. Translate the following text from English to Portuguese (Brazil). Maintain the original tone and context. Return ONLY the translated text, without explanations.";
 
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 2000;
+
+async function retryWithBackoff<T>(fn: () => Promise<T>, retries = MAX_RETRIES, delay = INITIAL_RETRY_DELAY): Promise<T> {
+    try {
+        return await fn();
+    } catch (error: any) {
+        if (retries === 0) throw error;
+
+        console.warn(`Translation failed, retrying in ${delay / 1000}s... (${retries} retries left). Error: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        return retryWithBackoff(fn, retries - 1, delay * 2);
+    }
+}
+
 export async function translateText({ text, provider, apiKey }: TranslationOptions): Promise<string> {
     const envApiKey = getApiKey(provider);
     const finalApiKey = apiKey || envApiKey;
@@ -19,21 +35,25 @@ export async function translateText({ text, provider, apiKey }: TranslationOptio
         throw new Error(`API Key for ${provider} is missing. Please check your configuration.`);
     }
 
-    try {
-        switch (provider) {
-            case 'gemini':
-                return await translateWithGemini(text, finalApiKey);
-            case 'openai':
-                return await translateWithOpenAI(text, finalApiKey);
-            case 'deepseek':
-                return await translateWithDeepSeek(text, finalApiKey);
-            default:
-                throw new Error('Unsupported provider');
+    const translateFn = async () => {
+        try {
+            switch (provider) {
+                case 'gemini':
+                    return await translateWithGemini(text, finalApiKey);
+                case 'openai':
+                    return await translateWithOpenAI(text, finalApiKey);
+                case 'deepseek':
+                    return await translateWithDeepSeek(text, finalApiKey);
+                default:
+                    throw new Error('Unsupported provider');
+            }
+        } catch (error) {
+            console.error(`Translation error with ${provider}:`, error);
+            throw error;
         }
-    } catch (error) {
-        console.error(`Translation error with ${provider}:`, error);
-        throw error;
-    }
+    };
+
+    return retryWithBackoff(translateFn);
 }
 
 function getApiKey(provider: TranslationProvider): string | undefined {
@@ -86,7 +106,17 @@ async function translateWithDeepSeek(text: string, apiKey: string): Promise<stri
         }),
     });
 
-    const data = await response.json();
+    // Check content type before parsing
+    const contentType = response.headers.get('content-type');
+    let data;
+
+    if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+    } else {
+        // Handle non-JSON response gracefully to propagate a clearer error
+        const text = await response.text();
+        throw new Error(`DeepSeek API returned non-JSON response (${response.status}): ${text.substring(0, 100)}`);
+    }
 
     if (!response.ok) {
         const errorMsg = data.error || data.message || response.statusText || 'Unknown error';

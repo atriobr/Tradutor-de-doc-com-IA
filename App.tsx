@@ -4,7 +4,9 @@ import FileUploader from './components/FileUploader';
 import ProcessingStatus from './components/ProcessingStatus';
 import ResultView from './components/ResultView';
 
-export type AppState = 'upload' | 'processing' | 'result';
+import CoverPreview from './components/CoverPreview';
+
+export type AppState = 'upload' | 'processing' | 'preview' | 'result';
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('upload');
@@ -15,11 +17,28 @@ export default function App() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [resultText, setResultText] = useState<string>('');
 
+  // Preview Data
+  const [previewData, setPreviewData] = useState<{ original: string, translated: string } | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
   const handleFileUpload = (selectedFile: File) => {
     setFile(selectedFile);
     setFileName(selectedFile.name);
     setFileSize((selectedFile.size / (1024 * 1024)).toFixed(2) + ' MB');
+
+    // Start with preview mode
     setAppState('processing');
+    setIsPreviewMode(true);
+  };
+
+  const handlePreviewReady = (original: string, translated: string) => {
+    setPreviewData({ original, translated });
+    setAppState('preview');
+  };
+
+  const handleConfirmTranslation = () => {
+    setAppState('processing');
+    setIsPreviewMode(false); // Disable preview mode to continue full translation
   };
 
   const handleProcessingComplete = (blob: Blob, text: string) => {
@@ -35,6 +54,8 @@ export default function App() {
     setFile(null);
     setResultBlob(null);
     setResultText('');
+    setPreviewData(null);
+    setIsPreviewMode(false);
   };
 
   return (
@@ -81,15 +102,17 @@ export default function App() {
       <main className="flex-grow flex flex-col items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-3xl">
 
-          <div className="text-center mb-10">
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
-              Tradução de Documentos com IA
-            </h1>
-            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Traduza livros técnicos, manuais e documentos PDF mantendo a formatação original.
-              Especializado em Inglês para Português Brasileiro.
-            </p>
-          </div>
+          {appState === 'upload' && (
+            <div className="text-center mb-10">
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
+                Tradução de Documentos com IA
+              </h1>
+              <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+                Traduza livros técnicos, manuais e documentos PDF mantendo a formatação original.
+                Especializado em Inglês para Português Brasileiro.
+              </p>
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden min-h-[400px] flex flex-col">
             {appState === 'upload' && (
@@ -102,6 +125,18 @@ export default function App() {
                 fileName={fileName}
                 provider={provider}
                 onComplete={handleProcessingComplete}
+                previewOnly={isPreviewMode}
+                onPreviewReady={handlePreviewReady}
+              />
+            )}
+
+            {appState === 'preview' && previewData && (
+              <CoverPreview
+                originalText={previewData.original}
+                translatedText={previewData.translated}
+                fileName={fileName}
+                onConfirm={handleConfirmTranslation}
+                onCancel={handleReset}
               />
             )}
 

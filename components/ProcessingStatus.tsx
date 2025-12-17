@@ -3,13 +3,15 @@ import { Loader2, CheckCircle2, FileText, Languages, FileOutput, AlertTriangle }
 import jsPDF from 'jspdf';
 import { extractTextFromPDF } from '../utils/pdfWorker';
 import { translateText, TranslationProvider } from '../utils/translationService';
-import { saveTranslationProgress, loadTranslationProgress, clearTranslationCache, getCacheInfo } from '../utils/translationCache';
+import { saveTranslationProgress, loadTranslationProgress, clearTranslationCache } from '../utils/translationCache';
 
 interface ProcessingStatusProps {
   file: File;
   fileName: string;
   provider: TranslationProvider;
   onComplete: (blob: Blob, text: string) => void;
+  previewOnly?: boolean;
+  onPreviewReady?: (original: string, translated: string) => void;
 }
 
 const STEPS = [
@@ -18,7 +20,7 @@ const STEPS = [
   { id: 3, label: 'Gerando PDF...', icon: FileOutput },
 ];
 
-export default function ProcessingStatus({ file, fileName, provider, onComplete }: ProcessingStatusProps) {
+export default function ProcessingStatus({ file, fileName, provider, onComplete, previewOnly, onPreviewReady }: ProcessingStatusProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,6 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete 
           setProgress(10 + (current / total) * 20); // 10% to 30%
         });
 
-
         // Step 2: Translation (PARALLEL for speed + CACHE for resume)
         setCurrentStep(1);
 
@@ -57,6 +58,37 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete 
 
         // Only translate pages that haven't been cached
         const startIndex = translatedPages.length;
+
+        // IF PREVIEW ONLY: Just do the first page if not done
+        if (previewOnly) {
+          if (translatedPages.length === 0 && pages.length > 0) {
+            // Translate first page
+            const firstPage = pages[0];
+            const translatedText = await translateText({
+              text: firstPage.text,
+              provider,
+              apiKey: undefined
+            });
+
+            const newPage = { ...firstPage, text: translatedText };
+            translatedPages.push(newPage);
+
+            // Save to cache so full run picks it up
+            saveTranslationProgress(fileName, provider, translatedPages, pages);
+          } else if (translatedPages.length > 0 && pages.length > 0) {
+            // First page already in cache
+            // do nothing, just use it
+          }
+
+          // Done with preview
+          if (onPreviewReady && pages.length > 0) {
+            // Ensure we have the translated text for the first page
+            const firstPageTranslated = translatedPages.find(p => p.pageNumber === pages[0].pageNumber);
+            onPreviewReady(pages[0].text, firstPageTranslated?.text || "");
+          }
+          return; // Stop here
+        }
+
         const BATCH_SIZE = 5;
 
         for (let i = startIndex; i < pages.length; i += BATCH_SIZE) {
@@ -88,7 +120,6 @@ export default function ProcessingStatus({ file, fileName, provider, onComplete 
 
         // Clear cache on successful completion
         clearTranslationCache();
-
 
         // Step 3: Reconstruction
         setCurrentStep(2);

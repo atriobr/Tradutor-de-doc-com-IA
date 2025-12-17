@@ -42,7 +42,7 @@ git push -u origin main
 ### Usar o Token:
 ```bash
 cd deploy-vercel
-git remote set-url origin https://SEU-TOKEN@github.com/atriobr/Tradutor-de-doc-com-IA.git
+git remote set-url origin https://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@github.com/atriobr/Tradutor-de-doc-com-IA.git
 git push -u origin main
 ```
 
