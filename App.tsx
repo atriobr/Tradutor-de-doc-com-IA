@@ -70,26 +70,6 @@ export default function App() {
             <span className="text-xl font-bold text-slate-900">TradutorPDF<span className="text-indigo-600">Pro</span></span>
           </div>
           <div className="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-600">
-            <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-lg">
-              <button
-                className={`px-3 py-1 rounded-md transition-all ${provider === 'gemini' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                onClick={() => setProvider('gemini')}
-              >
-                Gemini
-              </button>
-              <button
-                className={`px-3 py-1 rounded-md transition-all ${provider === 'openai' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                onClick={() => setProvider('openai')}
-              >
-                OpenAI
-              </button>
-              <button
-                className={`px-3 py-1 rounded-md transition-all ${provider === 'deepseek' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                onClick={() => setProvider('deepseek')}
-              >
-                DeepSeek
-              </button>
-            </div>
             <span className="flex items-center hover:text-indigo-600 cursor-pointer transition-colors">
               <ShieldCheck className="w-4 h-4 mr-2" />
               Seguro & Privado
@@ -181,7 +161,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-slate-50 border-t border-slate-200 py-8 text-center text-slate-500 text-sm">
-        <p>&copy; 2023 TradutorPDF Pro. Desenvolvido para fins de demonstração.</p>
+        <p>&copy; 2025 TradutorPDF Pro. Desenvolvido por tecc.cloud.</p>
       </footer>
     </div>
   );
